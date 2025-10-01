@@ -1,198 +1,175 @@
-/**
- * Central data export point
- * Import all game data here and export for use throughout the app
- */
+// src/data/index.ts - UPDATED
 
-import type {
-  Hero,
-  Scroll,
-  BuildArchetypeDefinition,
-  SynergyTag,
-  BuildArchetype,
-  Ascension,
-} from "../types";
+// Export all heroes
+export { crownPrince } from "./heroes/crownPrince";
+export { leiLuo } from "./heroes/leiLuo";
 
-type SynergisticItem = Scroll | Ascension;
+// Export all scrolls
+export { normalScrolls } from "./scrolls/normal";
+export { rareScrolls, legendaryScrolls } from "./scrolls/rareAndLegendary";
 
-// Heroes
+// Export build archetypes
+export {
+  buildArchetypes,
+  getArchetypeById,
+  getArchetypesByGemini,
+  getArchetypesByDifficulty,
+} from "./buildArchetypes";
+
+// Export wiki build templates
+export {
+  allWikiBuilds,
+  getWikiBuildsByHero,
+  getWikiBuildById,
+  getWikiBuildsByDifficulty,
+  isItemCoreToTemplate,
+  isItemRecommendedForTemplate,
+  getTemplateFitScore,
+} from "./wikiBuildTemplates";
+export type { WikiBuildTemplate } from "./wikiBuildTemplates";
+
+// Export weapons and Gemini
+export {
+  sampleWeapons,
+  geminiInscriptions,
+  getWeaponById,
+  getWeaponsByType,
+  getWeaponsWithGemini,
+  canHaveGemini,
+  calculateSharedCritX,
+  calculateSharedMagazine,
+  detectGeminiSynergy,
+} from "./geminiInscriptions";
+
+// Export recommendation engine
+export {
+  generateRecommendations,
+  detectBuildArchetype,
+} from "../utils/recommendationEngine";
+
 import { crownPrince } from "./heroes/crownPrince";
 import { leiLuo } from "./heroes/leiLuo";
-
-// Scrolls
-import normalScrolls from "./scrolls/normal";
+import { normalScrolls } from "./scrolls/normal";
 import { rareScrolls, legendaryScrolls } from "./scrolls/rareAndLegendary";
-
-// Build Archetypes
-import buildArchetypes from "./buildArchetypes";
-
-// ============================================================================
-// HEROES
-// ============================================================================
-
-export const allHeroes: Hero[] = [
-  crownPrince,
-  leiLuo,
-  // TODO: Add remaining heroes
-  // aoB ai, qingYan, tao, qianSui, xingZhe, li, nona, ziXiao, lyn, momo
-];
-
-export const getHeroById = (id: string): Hero | undefined => {
-  return allHeroes.find((hero) => hero.id === id);
-};
-
-export const getHeroByName = (name: string): Hero | undefined => {
-  return allHeroes.find(
-    (hero) => hero.name.toLowerCase() === name.toLowerCase()
-  );
-};
+import { buildArchetypes } from "./buildArchetypes";
+import type { Hero, Scroll, SynergyTag, BuildArchetype } from "../types";
 
 // ============================================================================
-// SCROLLS
+// AGGREGATED DATA
 // ============================================================================
+
+export const allHeroes: Hero[] = [crownPrince, leiLuo];
 
 export const allScrolls: Scroll[] = [
   ...normalScrolls,
   ...rareScrolls,
   ...legendaryScrolls,
-  // TODO: Add remaining scrolls and cursed scrolls
 ];
 
-export const getScrollById = (id: string): Scroll | undefined => {
-  return allScrolls.find((scroll) => scroll.id === id);
-};
+// ============================================================================
+// QUERY FUNCTIONS
+// ============================================================================
 
-export const getScrollsByRarity = (rarity: Scroll["rarity"]): Scroll[] => {
-  return allScrolls.filter((scroll) => scroll.rarity === rarity);
-};
+export function getHeroById(id: string): Hero | undefined {
+  return allHeroes.find((h) => h.id === id);
+}
 
-export const getScrollsByTag = (tag: SynergyTag): Scroll[] => {
-  return allScrolls.filter((scroll) => scroll.tags.includes(tag));
-};
+export function getHeroByName(name: string): Hero | undefined {
+  return allHeroes.find((h) => h.name.toLowerCase() === name.toLowerCase());
+}
 
-export const getScrollsByArchetype = (archetype: BuildArchetype): Scroll[] => {
-  return allScrolls.filter((scroll) =>
-    scroll.buildArchetypes.includes(archetype)
+export function getScrollById(id: string): Scroll | undefined {
+  return allScrolls.find((s) => s.id === id);
+}
+
+export function getScrollsByRarity(rarity: string): Scroll[] {
+  return allScrolls.filter((s) => s.rarity === rarity);
+}
+
+export function getScrollsByTag(tag: SynergyTag): Scroll[] {
+  return allScrolls.filter((s) => s.tags.includes(tag));
+}
+
+export function getScrollsByArchetype(archetype: string): Scroll[] {
+  return allScrolls.filter((s) => s.buildArchetypes.includes(archetype));
+}
+
+// ============================================================================
+// SYNERGY ENGINE
+// ============================================================================
+
+export function checkSynergy(
+  itemA: { id: string; synergyWith: string[] },
+  itemB: { id: string }
+): boolean {
+  return itemA.synergyWith.includes(itemB.id);
+}
+
+export function checkAntiSynergy(
+  itemA: { id: string; antiSynergyWith?: string[] },
+  itemB: { id: string }
+): boolean {
+  return itemA.antiSynergyWith?.includes(itemB.id) || false;
+}
+
+export function getSynergisticItems(item: Scroll): Scroll[] {
+  return allScrolls.filter(
+    (s) => item.synergyWith.includes(s.id) || s.synergyWith.includes(item.id)
   );
-};
+}
 
-// ============================================================================
-// BUILD ARCHETYPES
-// ============================================================================
+export function calculateSynergyScore(
+  item: Scroll,
+  acquiredItems: Scroll[]
+): number {
+  let score = 0;
 
-export { buildArchetypes };
+  acquiredItems.forEach((acquired) => {
+    // Direct synergy
+    if (checkSynergy(item, acquired) || checkSynergy(acquired, item)) {
+      score += 10;
+    }
 
-export const getArchetypeById = (
-  id: string
-): BuildArchetypeDefinition | undefined => {
-  return buildArchetypes.find((archetype) => archetype.id === id);
-};
+    // Tag overlap
+    const commonTags = item.tags.filter((tag) => acquired.tags.includes(tag));
+    score += commonTags.length * 2;
+
+    // Anti-synergy penalty
+    if (checkAntiSynergy(item, acquired) || checkAntiSynergy(acquired, item)) {
+      score -= 20;
+    }
+  });
+
+  return score;
+}
 
 // ============================================================================
 // STATISTICS
 // ============================================================================
 
-export const dataStats = {
-  totalHeroes: allHeroes.length,
-  totalScrolls: allScrolls.length,
-  normalScrolls: normalScrolls.length,
-  rareScrolls: rareScrolls.length,
-  legendaryScrolls: legendaryScrolls.length,
-  cursedScrolls: 0, // TODO
-  totalArchetypes: buildArchetypes.length,
-};
-
-// ============================================================================
-// SYNERGY UTILITIES
-// ============================================================================
-
-/**
- * Check if two items have synergy
- */
-export const checkSynergy = (
-  itemA: SynergisticItem,
-  itemB: SynergisticItem
-): boolean => {
-  if (!itemA || !itemB) return false;
-
-  // Check if itemA lists itemB as synergy
-  if (itemA.synergyWith?.includes(itemB.id)) return true;
-
-  // Check if itemB lists itemA as synergy
-  if (itemB.synergyWith?.includes(itemA.id)) return true;
-
-  // Check tag overlap
-  const sharedTags =
-    itemA.tags?.filter((tag) => itemB.tags?.includes(tag)) || [];
-  return sharedTags.length >= 2;
-};
-
-/**
- * Check if two items have anti-synergy
- */
-export const checkAntiSynergy = (
-  itemA: SynergisticItem,
-  itemB: SynergisticItem
-): boolean => {
-  if (!itemA || !itemB) return false;
-
-  if (itemA.antiSynergyWith?.includes(itemB.id)) return true;
-  if (itemB.antiSynergyWith?.includes(itemA.id)) return true;
-
-  return false;
-};
-
-/**
- * Get all items that synergize with the given item
- */
-export const getSynergisticItems = (
-  item: SynergisticItem
-): SynergisticItem[] => {
-  if (!item) return [];
-
-  return allScrolls.filter((scroll) => checkSynergy(item, scroll));
-};
-
-/**
- * Calculate synergy score between an item and a list of acquired items
- */
-export const calculateSynergyScore = (
-  item: SynergisticItem,
-  acquiredItems: SynergisticItem[]
-): number => {
-  let score = 0;
-
-  for (const acquired of acquiredItems) {
-    if (checkSynergy(item, acquired)) {
-      score += 10;
-    }
-    if (checkAntiSynergy(item, acquired)) {
-      score -= 15;
-    }
-  }
-
-  return score;
-};
-
-// ============================================================================
-// EXPORTS
-// ============================================================================
-
-export default {
-  heroes: allHeroes,
-  scrolls: allScrolls,
-  buildArchetypes,
-  stats: dataStats,
-
-  // Utility functions
-  getHeroById,
-  getHeroByName,
-  getScrollById,
-  getScrollsByRarity,
-  getScrollsByTag,
-  getScrollsByArchetype,
-  getArchetypeById,
-  checkSynergy,
-  checkAntiSynergy,
-  getSynergisticItems,
-  calculateSynergyScore,
-};
+export function getDataStats() {
+  return {
+    heroes: {
+      total: allHeroes.length,
+      complete: allHeroes.length,
+    },
+    scrolls: {
+      total: allScrolls.length,
+      byRarity: {
+        normal: getScrollsByRarity("normal").length,
+        rare: getScrollsByRarity("rare").length,
+        legendary: getScrollsByRarity("legendary").length,
+        cursed: getScrollsByRarity("cursed").length,
+      },
+    },
+    weapons: {
+      total: 9,
+    },
+    archetypes: {
+      total: buildArchetypes.length,
+      geminiRequired: buildArchetypes.filter(
+        (a: BuildArchetype) => a.requiredGemini
+      ).length,
+    },
+  };
+}
